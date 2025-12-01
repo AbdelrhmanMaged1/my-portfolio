@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import emailjs from '@emailjs/browser'; // UNCOMMENT THIS LINE FOR LOCAL USE
 import { 
   Github, 
   Linkedin, 
@@ -22,9 +23,9 @@ const PERSONAL_INFO = {
   titles: ["Frontend Developer", "Backend Developer", "Fullstack Engineer"],
   tagline: "Building digital products with clean code and pixel-perfect design.",
   about: "I am an 18-year-old passionate developer bridging the gap between elegant user interfaces and robust backend architecture. With a diverse skill set ranging from React & Next.js to Laravel & Python, I build scalable web applications that solve real-world problems.",
-  email: "hello@example.com",
+  email: "abdelrhman.syam1@gmail.com",
   socials: {
-    github: "#",
+    github: "https://github.com/AbdelrhmanMaged1",
     linkedin: "#",
     twitter: "#"
   }
@@ -415,13 +416,33 @@ const Projects = () => {
 
 const Contact = () => {
   const [formStatus, setFormStatus] = useState('idle');
+  const form = useRef();
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setFormStatus('submitting');
-    setTimeout(() => {
-      setFormStatus('success');
-    }, 1500);
+    
+    // --- FOR LOCAL VS CODE USE (Real Email) ---
+    // 1. Install EmailJS: npm install @emailjs/browser
+    // 2. Uncomment the import at the top
+    // 3. Uncomment the code below and delete the setTimeout block above
+    
+    
+    emailjs.sendForm(
+      'service_a3ux9ta',
+      'template_6nm9l7f',
+      form.current,
+      'orfOk-sPfz8IJshSg'
+    )
+    .then((result) => {
+        console.log('Success:', result.text);
+        setFormStatus('success');
+    }, (error) => {
+        console.log('Error:', error.text);
+        setFormStatus('error');
+        alert("Failed to send message.");
+    });
+    
   };
 
   return (
@@ -443,11 +464,12 @@ const Contact = () => {
               <span className="text-sm opacity-80 mt-1">I'll get back to you soon.</span>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4 mb-16 text-left bg-slate-900/50 p-8 rounded-2xl border border-slate-800 backdrop-blur-sm shadow-2xl">
+            <form ref={form} onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4 mb-16 text-left bg-slate-900/50 p-8 rounded-2xl border border-slate-800 backdrop-blur-sm shadow-2xl">
               <div>
                   <label htmlFor="email" className="block text-sm font-medium text-slate-400 mb-2">Your Email</label>
                   <input 
                     type="email" 
+                    name="user_email"
                     id="email"
                     required
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all placeholder-slate-600"
@@ -457,6 +479,7 @@ const Contact = () => {
               <div>
                   <label htmlFor="message" className="block text-sm font-medium text-slate-400 mb-2">Message</label>
                   <textarea 
+                    name="message"
                     id="message"
                     required
                     rows="4"
