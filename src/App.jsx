@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
- import emailjs from '@emailjs/browser'; // UNCOMMENT THIS LINE FOR LOCAL USE
+import emailjs from '@emailjs/browser'; // UNCOMMENT THIS LINE FOR LOCAL USE
 import { 
   Github, 
   Linkedin, 
@@ -433,7 +433,7 @@ const Contact = () => {
     
     emailjs.sendForm(
       'service_a3ux9ta',
-      'template_6nm9l7f',
+      'template_l2nm5mm',
       form.current,
       'orfOk-sPfz8IJshSg'
     )
