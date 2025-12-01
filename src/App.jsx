@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import emailjs from '@emailjs/browser'; // UNCOMMENT THIS LINE FOR LOCAL USE
+ import emailjs from '@emailjs/browser'; // UNCOMMENT THIS LINE FOR LOCAL USE
 import { 
   Github, 
   Linkedin, 
@@ -421,6 +421,9 @@ const Contact = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
     setFormStatus('submitting');
+
+    // --- FOR LIVE PREVIEW ONLY (Simulated) ---
+    
     
     // --- FOR LOCAL VS CODE USE (Real Email) ---
     // 1. Install EmailJS: npm install @emailjs/browser
@@ -440,7 +443,7 @@ const Contact = () => {
     }, (error) => {
         console.log('Error:', error.text);
         setFormStatus('error');
-        alert("Failed to send message.");
+        alert("Failed to send message: " + error.text);
     });
     
   };
