@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { 
   Github, Linkedin, Mail, ExternalLink, Code2, Terminal, Cpu, Globe, 
-  Menu, X, ChevronDown, ChevronLeft, Database, Sparkles, Plus, Search, Trash2, // <--- ADDED ChevronLeft HERE
+  Menu, X, ChevronDown, ChevronLeft, Database, Sparkles, Plus, Search, Trash2,
   Bot, FileText, Tag, Settings, Check, Cloud, CloudOff, ArrowLeft, 
   LogOut, User, Lock, Loader, KeyRound
 } from 'lucide-react';
@@ -13,8 +13,8 @@ import {
   getAuth, 
   signInWithPopup,
   GoogleAuthProvider,
-  signInWithEmailAndPassword, // <--- Added for Email Login
-  createUserWithEmailAndPassword, // <--- Added for Sign Up
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signInWithCustomToken,
   onAuthStateChanged,
   signOut,
@@ -97,7 +97,14 @@ const useAuth = () => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-      setAuthError("Invalid email or password.");
+      console.error("Email Login Error:", error.code, error.message);
+      if (error.code === 'auth/invalid-credential') {
+        setAuthError("Incorrect email or password.");
+      } else if (error.code === 'auth/invalid-email') {
+        setAuthError("Invalid email address.");
+      } else {
+        setAuthError("Login failed. Please try again.");
+      }
       setLoading(false);
     }
   };
@@ -107,8 +114,18 @@ const useAuth = () => {
     setAuthError(null);
     try {
       await createUserWithEmailAndPassword(auth, email, password);
+      // Automatically signs in after creation
     } catch (error) {
-      setAuthError(error.message.includes('email-already-in-use') ? "Email already exists." : "Signup failed.");
+      console.error("Signup Error:", error.code, error.message);
+      if (error.code === 'auth/email-already-in-use') {
+        setAuthError("Email already exists. Try logging in.");
+      } else if (error.code === 'auth/weak-password') {
+        setAuthError("Password should be at least 6 characters.");
+      } else if (error.code === 'auth/operation-not-allowed') {
+        setAuthError("Email/Password login is not enabled in Firebase Console.");
+      } else {
+        setAuthError("Signup failed. Check console for details.");
+      }
       setLoading(false);
     }
   };
