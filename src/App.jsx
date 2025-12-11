@@ -36,12 +36,12 @@ import {
 // FIREBASE CONFIGURATION
 // ==========================================
 const localFirebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyBvjPLVDEcTfFPf7sprjQQmJ2OasG69fIE",
+  authDomain: "mindflow-portfolio.firebaseapp.com",
+  projectId: "mindflow-portfolio",
+  storageBucket: "mindflow-portfolio.firebasestorage.app",
+  messagingSenderId: "948437959652",
+  appId: "1:948437959652:web:52927a9a89671c16abbdf1"
 };
 
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
