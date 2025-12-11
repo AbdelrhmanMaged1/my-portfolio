@@ -2,20 +2,23 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { 
   Github, Linkedin, Mail, ExternalLink, Code2, Terminal, Cpu, Globe, 
-  Menu, X, ChevronDown, Database, Sparkles, Plus, Search, Trash2, 
+  Menu, X, ChevronDown, ChevronLeft, Database, Sparkles, Plus, Search, Trash2, // <--- ADDED ChevronLeft HERE
   Bot, FileText, Tag, Settings, Check, Cloud, CloudOff, ArrowLeft, 
-  LogOut, User, Lock, Loader
+  LogOut, User, Lock, Loader, KeyRound
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
-  signInWithPopup,       // CHANGED: For Google Popup
-  GoogleAuthProvider,    // CHANGED: Google Provider
+  signInWithPopup,
+  GoogleAuthProvider,
+  signInWithEmailAndPassword, // <--- Added for Email Login
+  createUserWithEmailAndPassword, // <--- Added for Sign Up
   signInWithCustomToken,
   onAuthStateChanged,
-  signOut 
+  signOut,
+  updateProfile
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -32,17 +35,15 @@ import {
 // ==========================================
 // FIREBASE CONFIGURATION
 // ==========================================
-// 1. FOR LOCAL USE: Paste your config from Firebase Console below
 const localFirebaseConfig = {
-  apiKey: "AIzaSyBvjPLVDEcTfFPf7sprjQQmJ2OasG69fIE",
-  authDomain: "mindflow-portfolio.firebaseapp.com",
-  projectId: "mindflow-portfolio",
-  storageBucket: "mindflow-portfolio.firebasestorage.app",
-  messagingSenderId: "948437959652",
-  appId: "1:948437959652:web:52927a9a89671c16abbdf1"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 
-// Logic to switch between Preview Environment and Local
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : localFirebaseConfig;
@@ -56,20 +57,16 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'mindflow-v1';
 // CUSTOM HOOKS
 // ==========================================
 
-// Auth Hook: Handles login/logout
+// Auth Hook: Handles all login methods
 const useAuth = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
     const initAuth = async () => {
-      // Preview environment token handling
       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        try {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } catch (err) {
-          console.error("Token auth failed", err);
-        }
+        try { await signInWithCustomToken(auth, __initial_auth_token); } catch (err) { console.error(err); }
       }
     };
     initAuth();
@@ -81,15 +78,37 @@ const useAuth = () => {
     return () => unsubscribe();
   }, []);
 
-  const login = async () => {
+  const loginGoogle = async () => {
     setLoading(true);
+    setAuthError(null);
     try {
-      // --- GOOGLE LOGIN LOGIC ---
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (error) {
-      console.error("Login failed:", error);
-      alert("Login failed. Make sure Google Auth is enabled in Firebase Console.");
+      console.error("Google Login failed:", error);
+      setAuthError(error.message);
+      setLoading(false);
+    }
+  };
+
+  const loginEmail = async (email, password) => {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      setAuthError("Invalid email or password.");
+      setLoading(false);
+    }
+  };
+
+  const signupEmail = async (email, password) => {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      setAuthError(error.message.includes('email-already-in-use') ? "Email already exists." : "Signup failed.");
       setLoading(false);
     }
   };
@@ -98,7 +117,7 @@ const useAuth = () => {
     await signOut(auth);
   };
 
-  return { user, loading, login, logout };
+  return { user, loading, authError, loginGoogle, loginEmail, signupEmail, logout };
 };
 
 // Data Hook: Real-time Notes Sync
@@ -114,16 +133,11 @@ const useNotes = (user) => {
     }
 
     setLoading(true);
-    // Path structure: /artifacts/{appId}/users/{userId}/notes
     const notesCollection = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
     const q = query(notesCollection);
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedNotes = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      // Sort in memory (newest updated first)
+      const fetchedNotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       fetchedNotes.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
       setNotes(fetchedNotes);
       setLoading(false);
@@ -135,11 +149,7 @@ const useNotes = (user) => {
   const addNote = async (noteData) => {
     if (!user) return;
     const col = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
-    return await addDoc(col, { 
-      ...noteData, 
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp() 
-    });
+    return await addDoc(col, { ...noteData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   };
 
   const updateNote = async (id, data) => {
@@ -158,63 +168,125 @@ const useNotes = (user) => {
 };
 
 // ==========================================
-// COMPONENT: LOGIN SCREEN
+// COMPONENT: LOGIN SCREEN (Dual Mode)
 // ==========================================
 
-const LoginScreen = ({ onLogin, loading }) => (
-  <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans">
-    <div className="absolute inset-0 overflow-hidden">
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-pulse"></div>
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-700"></div>
-    </div>
-    
-    <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl backdrop-blur-xl">
-      <div className="text-center mb-8">
-        <div className="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-cyan-500/20">
-          <Sparkles size={32} className="text-white" />
-        </div>
-        <h1 className="text-3xl font-bold text-white mb-2">MindFlow</h1>
-        <p className="text-slate-400">Professional AI Note-Taking</p>
-      </div>
+const LoginScreen = ({ loginGoogle, loginEmail, signupEmail, authError, loading }) => {
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-      <div className="space-y-4">
-        <button 
-          onClick={onLogin}
-          disabled={loading}
-          className="w-full py-4 bg-white hover:bg-slate-100 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-3 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? (
-            <Loader className="animate-spin" size={20} />
-          ) : (
-            <>
-              {/* Custom Google SVG Icon */}
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-              </svg>
-              Continue with Google
-            </>
-          )}
-        </button>
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (isSignUp) {
+      signupEmail(email, password);
+    } else {
+      loginEmail(email, password);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans">
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-700"></div>
       </div>
       
-      <div className="mt-8 pt-6 border-t border-slate-800 text-center">
-        <Link to="/" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors flex items-center justify-center gap-2">
-          <ArrowLeft size={16} /> Back to Portfolio
-        </Link>
+      <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl backdrop-blur-xl">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-cyan-500/20">
+            <Sparkles size={32} className="text-white" />
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-2">MindFlow</h1>
+          <p className="text-slate-400">Professional AI Note-Taking</p>
+        </div>
+
+        {/* --- Email/Pass Form --- */}
+        <form onSubmit={handleSubmit} className="space-y-4 mb-6">
+          {authError && (
+            <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm text-center">
+              {authError}
+            </div>
+          )}
+          
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1 ml-1">Email Address</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-2.5 text-slate-500" size={18} />
+              <input 
+                type="email" 
+                required 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-cyan-500 transition-colors"
+                placeholder="you@example.com"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1 ml-1">Password</label>
+            <div className="relative">
+              <KeyRound className="absolute left-3 top-2.5 text-slate-500" size={18} />
+              <input 
+                type="password" 
+                required 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-cyan-500 transition-colors"
+                placeholder="••••••••"
+                minLength={6}
+              />
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-cyan-900/20 disabled:opacity-50"
+          >
+            {loading ? <Loader className="animate-spin mx-auto" size={20} /> : (isSignUp ? 'Create Account' : 'Sign In')}
+          </button>
+        </form>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-800"></div></div>
+          <div className="relative flex justify-center text-xs uppercase"><span className="bg-slate-900 px-2 text-slate-500">Or continue with</span></div>
+        </div>
+
+        {/* --- Google Button --- */}
+        <button 
+          onClick={loginGoogle}
+          disabled={loading}
+          className="w-full py-3 bg-white hover:bg-slate-100 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          Google
+        </button>
+
+        <div className="mt-6 text-center text-sm text-slate-400">
+          {isSignUp ? "Already have an account?" : "Don't have an account?"}{' '}
+          <button onClick={() => setIsSignUp(!isSignUp)} className="text-cyan-400 hover:underline font-medium">
+            {isSignUp ? "Sign In" : "Sign Up"}
+          </button>
+        </div>
+        
+        <div className="mt-8 pt-6 border-t border-slate-800 text-center">
+          <Link to="/" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors flex items-center justify-center gap-2">
+            <ArrowLeft size={16} /> Back to Portfolio
+          </Link>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ==========================================
 // COMPONENT: MINDFLOW APP (PROTECTED)
 // ==========================================
 
 const MindFlow = () => {
-  const { user, loading: authLoading, login, logout } = useAuth();
+  const { user, loading: authLoading, loginGoogle, loginEmail, signupEmail, authError, logout } = useAuth();
   const { notes, loading: notesLoading, addNote, updateNote, deleteNote } = useNotes(user);
   
   const [activeNoteId, setActiveNoteId] = useState(null);
@@ -223,12 +295,9 @@ const MindFlow = () => {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [saveStatus, setSaveStatus] = useState('saved');
-
-  // Input states for immediate typing feedback
   const [localTitle, setLocalTitle] = useState('');
   const [localContent, setLocalContent] = useState('');
 
-  // 1. Sync Active Note Selection
   useEffect(() => {
     if (!activeNoteId && notes.length > 0) {
       setActiveNoteId(notes[0].id);
@@ -239,7 +308,6 @@ const MindFlow = () => {
 
   const activeNote = notes.find(n => n.id === activeNoteId);
 
-  // 2. Sync Local State with Database State
   useEffect(() => {
     if (activeNote) {
       setLocalTitle(activeNote.title || '');
@@ -258,25 +326,18 @@ const MindFlow = () => {
   };
 
   const handleAddNote = async () => {
-    const newNote = {
-      title: 'Untitled Note',
-      content: '',
-      tags: [],
-    };
+    const newNote = { title: 'Untitled Note', content: '', tags: [] };
     try {
       const docRef = await addNote(newNote);
       setActiveNoteId(docRef.id);
       showNotification('New note created');
-    } catch (e) {
-      showNotification('Error creating note', 'error');
-    }
+    } catch (e) { showNotification('Error creating note', 'error'); }
   };
 
   const onTitleChange = (e) => {
     const val = e.target.value;
     setLocalTitle(val);
     setSaveStatus('saving');
-    
     if (window.titleTimeout) clearTimeout(window.titleTimeout);
     window.titleTimeout = setTimeout(() => {
       updateNote(activeNoteId, { title: val }).then(() => setSaveStatus('saved'));
@@ -287,7 +348,6 @@ const MindFlow = () => {
     const val = e.target.value;
     setLocalContent(val);
     setSaveStatus('saving');
-
     if (window.contentTimeout) clearTimeout(window.contentTimeout);
     window.contentTimeout = setTimeout(() => {
       updateNote(activeNoteId, { content: val }).then(() => setSaveStatus('saved'));
@@ -302,7 +362,6 @@ const MindFlow = () => {
       const newContent = localContent + aiSummary;
       setLocalContent(newContent);
       updateNote(activeNoteId, { content: newContent });
-      
       if (!activeNote?.tags?.includes('AI Enhanced')) {
         updateNote(activeNoteId, { tags: [...(activeNote?.tags || []), 'AI Enhanced'] });
       }
@@ -312,11 +371,10 @@ const MindFlow = () => {
   };
 
   if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader className="animate-spin" /></div>;
-  if (!user) return <LoginScreen onLogin={login} loading={authLoading} />;
+  if (!user) return <LoginScreen loginGoogle={loginGoogle} loginEmail={loginEmail} signupEmail={signupEmail} authError={authError} loading={authLoading} />;
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-300 font-sans overflow-hidden animate-fadeIn">
-      {/* Sidebar */}
       <div className={`${isSidebarOpen ? 'w-80' : 'w-0'} bg-slate-900 border-r border-slate-800 transition-all duration-300 flex flex-col relative`}>
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xl text-white">
@@ -324,22 +382,13 @@ const MindFlow = () => {
             MindFlow
           </div>
         </div>
-        
         <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
           <div className="flex items-center gap-2 overflow-hidden">
-            {user.photoURL ? (
-              <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full" />
-            ) : (
-              <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center"><User size={14} className="text-slate-300" /></div>
-            )}
-            <div className="text-xs truncate">
-              <p className="text-white font-medium truncate w-32">{user.displayName || "User"}</p>
-              <p className="text-slate-500">Online</p>
-            </div>
+            {user.photoURL ? <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full" /> : <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center"><User size={14} className="text-slate-300" /></div>}
+            <div className="text-xs truncate"><p className="text-white font-medium truncate w-32">{user.displayName || user.email}</p><p className="text-slate-500">Online</p></div>
           </div>
           <button onClick={logout} className="p-1.5 hover:bg-slate-800 rounded text-slate-500 hover:text-red-400"><LogOut size={16} /></button>
         </div>
-
         <div className="p-4 space-y-4">
           <button onClick={handleAddNote} className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg flex items-center justify-center gap-2 font-medium transition-all shadow-lg shadow-cyan-900/20"><Plus size={20} /> New Note</button>
           <div className="relative group">
@@ -347,7 +396,6 @@ const MindFlow = () => {
             <input type="text" placeholder="Search notes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-800 text-sm rounded-lg pl-10 pr-4 py-2.5 border border-slate-700 focus:border-cyan-500 focus:outline-none" />
           </div>
         </div>
-        
         <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
           {notesLoading && <div className="text-center py-4"><Loader className="animate-spin inline text-slate-500" /></div>}
           {!notesLoading && filteredNotes.map(note => (
@@ -363,7 +411,6 @@ const MindFlow = () => {
         <div className="p-4 border-t border-slate-800"><Link to="/" className="text-xs flex items-center justify-center gap-2 text-slate-500 hover:text-cyan-400 w-full py-2 hover:bg-slate-800 rounded-lg"><ArrowLeft size={12} /> Back to Portfolio</Link></div>
       </div>
 
-      {/* Editor */}
       <div className="flex-1 flex flex-col h-full bg-slate-950 relative">
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className={`absolute top-4 left-4 z-10 p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white border border-slate-700`}>{isSidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}</button>
 
