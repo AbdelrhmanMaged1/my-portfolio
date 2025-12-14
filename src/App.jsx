@@ -308,7 +308,7 @@ export default function App() {
                     <a href="https://mindflow-notes.vercel.app/" target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-full hover:bg-teal-500 hover:text-white transition-colors border border-slate-700" title="View Live">
                       <ExternalLink size={16} />
                     </a>
-                    <a href="#" target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-full hover:bg-teal-500 hover:text-white transition-colors border border-slate-700" title="View Code">
+                    <a href="https://github.com/AbdelrhmanMaged1/mindflow-notes" target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-full hover:bg-teal-500 hover:text-white transition-colors border border-slate-700" title="View Code">
                       <Github size={16} />
                     </a>
                   </div>
