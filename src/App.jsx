@@ -1,611 +1,552 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+// UNCOMMENT THIS LINE LOCALLY AFTER RUNNING: npm install @emailjs/browser
+ import emailjs from '@emailjs/browser';
 import { 
-  Github, Linkedin, Mail, ExternalLink, Code2, Terminal, Cpu, Globe, 
-  Menu, X, ChevronDown, ChevronLeft, Database, Sparkles, Plus, Search, Trash2,
-  Bot, FileText, Tag, Settings, Check, Cloud, CloudOff, ArrowLeft, 
-  LogOut, User, Lock, Loader, KeyRound
+  Github, 
+  Linkedin, 
+  Mail, 
+  ExternalLink, 
+  Code, 
+  Terminal, 
+  Globe, 
+  Database,
+  Layout,
+  Server,
+  Smartphone,
+  Send,
+  MapPin,
+  Menu,
+  X,
+  Cpu,
+  Layers,
+  CheckCircle,
+  Loader2,
+  ArrowRight,
+  AlertCircle
 } from 'lucide-react';
 
-// --- FIREBASE IMPORTS ---
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInWithPopup,
-  GoogleAuthProvider,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithCustomToken,
-  onAuthStateChanged,
-  signOut,
-  updateProfile
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  onSnapshot, 
-  query, 
-  serverTimestamp 
-} from 'firebase/firestore';
-
-// ==========================================
-// FIREBASE CONFIGURATION
-// ==========================================
-const localFirebaseConfig = {
-  apiKey: "AIzaSyBvjPLVDEcTfFPf7sprjQQmJ2OasG69fIE",
-  authDomain: "mindflow-portfolio.firebaseapp.com",
-  projectId: "mindflow-portfolio",
-  storageBucket: "mindflow-portfolio.firebasestorage.app",
-  messagingSenderId: "948437959652",
-  appId: "1:948437959652:web:52927a9a89671c16abbdf1"
-};
-
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : localFirebaseConfig;
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'mindflow-v1';
-
-// ==========================================
-// CUSTOM HOOKS
-// ==========================================
-
-// Auth Hook: Handles all login methods
-const useAuth = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState(null);
-
-  useEffect(() => {
-    const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        try { await signInWithCustomToken(auth, __initial_auth_token); } catch (err) { console.error(err); }
-      }
-    };
-    initAuth();
-
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const loginGoogle = async () => {
-    setLoading(true);
-    setAuthError(null);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Google Login failed:", error);
-      setAuthError(error.message);
-      setLoading(false);
-    }
-  };
-
-  const loginEmail = async (email, password) => {
-    setLoading(true);
-    setAuthError(null);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      console.error("Email Login Error:", error.code, error.message);
-      if (error.code === 'auth/invalid-credential') {
-        setAuthError("Incorrect email or password.");
-      } else if (error.code === 'auth/invalid-email') {
-        setAuthError("Invalid email address.");
-      } else {
-        setAuthError("Login failed. Please try again.");
-      }
-      setLoading(false);
-    }
-  };
-
-  const signupEmail = async (email, password) => {
-    setLoading(true);
-    setAuthError(null);
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      // Automatically signs in after creation
-    } catch (error) {
-      console.error("Signup Error:", error.code, error.message);
-      if (error.code === 'auth/email-already-in-use') {
-        setAuthError("Email already exists. Try logging in.");
-      } else if (error.code === 'auth/weak-password') {
-        setAuthError("Password should be at least 6 characters.");
-      } else if (error.code === 'auth/operation-not-allowed') {
-        setAuthError("Email/Password login is not enabled in Firebase Console.");
-      } else {
-        setAuthError("Signup failed. Check console for details.");
-      }
-      setLoading(false);
-    }
-  };
-
-  const logout = async () => {
-    await signOut(auth);
-  };
-
-  return { user, loading, authError, loginGoogle, loginEmail, signupEmail, logout };
-};
-
-// Data Hook: Real-time Notes Sync
-const useNotes = (user) => {
-  const [notes, setNotes] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!user) {
-      setNotes([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const notesCollection = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
-    const q = query(notesCollection);
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedNotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      fetchedNotes.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
-      setNotes(fetchedNotes);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  const addNote = async (noteData) => {
-    if (!user) return;
-    const col = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
-    return await addDoc(col, { ...noteData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-  };
-
-  const updateNote = async (id, data) => {
-    if (!user) return;
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'notes', id);
-    await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
-  };
-
-  const deleteNote = async (id) => {
-    if (!user) return;
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'notes', id);
-    await deleteDoc(docRef);
-  };
-
-  return { notes, loading, addNote, updateNote, deleteNote };
-};
-
-// ==========================================
-// COMPONENT: LOGIN SCREEN (Dual Mode)
-// ==========================================
-
-const LoginScreen = ({ loginGoogle, loginEmail, signupEmail, authError, loading }) => {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (isSignUp) {
-      signupEmail(email, password);
-    } else {
-      loginEmail(email, password);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans">
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-700"></div>
-      </div>
-      
-      <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl backdrop-blur-xl">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-cyan-500/20">
-            <Sparkles size={32} className="text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">MindFlow</h1>
-          <p className="text-slate-400">Professional AI Note-Taking</p>
-        </div>
-
-        {/* --- Email/Pass Form --- */}
-        <form onSubmit={handleSubmit} className="space-y-4 mb-6">
-          {authError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm text-center">
-              {authError}
-            </div>
-          )}
-          
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1 ml-1">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-2.5 text-slate-500" size={18} />
-              <input 
-                type="email" 
-                required 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-cyan-500 transition-colors"
-                placeholder="you@example.com"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1 ml-1">Password</label>
-            <div className="relative">
-              <KeyRound className="absolute left-3 top-2.5 text-slate-500" size={18} />
-              <input 
-                type="password" 
-                required 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-cyan-500 transition-colors"
-                placeholder="••••••••"
-                minLength={6}
-              />
-            </div>
-          </div>
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-cyan-900/20 disabled:opacity-50"
-          >
-            {loading ? <Loader className="animate-spin mx-auto" size={20} /> : (isSignUp ? 'Create Account' : 'Sign In')}
-          </button>
-        </form>
-
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-800"></div></div>
-          <div className="relative flex justify-center text-xs uppercase"><span className="bg-slate-900 px-2 text-slate-500">Or continue with</span></div>
-        </div>
-
-        {/* --- Google Button --- */}
-        <button 
-          onClick={loginGoogle}
-          disabled={loading}
-          className="w-full py-3 bg-white hover:bg-slate-100 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-3 transition-all disabled:opacity-50"
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-          Google
-        </button>
-
-        <div className="mt-6 text-center text-sm text-slate-400">
-          {isSignUp ? "Already have an account?" : "Don't have an account?"}{' '}
-          <button onClick={() => setIsSignUp(!isSignUp)} className="text-cyan-400 hover:underline font-medium">
-            {isSignUp ? "Sign In" : "Sign Up"}
-          </button>
-        </div>
-        
-        <div className="mt-8 pt-6 border-t border-slate-800 text-center">
-          <Link to="/" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors flex items-center justify-center gap-2">
-            <ArrowLeft size={16} /> Back to Portfolio
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ==========================================
-// COMPONENT: MINDFLOW APP (PROTECTED)
-// ==========================================
-
-const MindFlow = () => {
-  const { user, loading: authLoading, loginGoogle, loginEmail, signupEmail, authError, logout } = useAuth();
-  const { notes, loading: notesLoading, addNote, updateNote, deleteNote } = useNotes(user);
-  
-  const [activeNoteId, setActiveNoteId] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [notification, setNotification] = useState(null);
-  const [saveStatus, setSaveStatus] = useState('saved');
-  const [localTitle, setLocalTitle] = useState('');
-  const [localContent, setLocalContent] = useState('');
-
-  useEffect(() => {
-    if (!activeNoteId && notes.length > 0) {
-      setActiveNoteId(notes[0].id);
-    } else if (activeNoteId && !notes.find(n => n.id === activeNoteId)) {
-      setActiveNoteId(notes.length > 0 ? notes[0].id : null);
-    }
-  }, [notes, activeNoteId]);
-
-  const activeNote = notes.find(n => n.id === activeNoteId);
-
-  useEffect(() => {
-    if (activeNote) {
-      setLocalTitle(activeNote.title || '');
-      setLocalContent(activeNote.content || '');
-    }
-  }, [activeNoteId]); 
-
-  const filteredNotes = notes.filter(note => 
-    (note.title?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-    (note.content?.toLowerCase() || '').includes(searchQuery.toLowerCase())
-  );
-
-  const showNotification = (msg, type = 'success') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  const handleAddNote = async () => {
-    const newNote = { title: 'Untitled Note', content: '', tags: [] };
-    try {
-      const docRef = await addNote(newNote);
-      setActiveNoteId(docRef.id);
-      showNotification('New note created');
-    } catch (e) { showNotification('Error creating note', 'error'); }
-  };
-
-  const onTitleChange = (e) => {
-    const val = e.target.value;
-    setLocalTitle(val);
-    setSaveStatus('saving');
-    if (window.titleTimeout) clearTimeout(window.titleTimeout);
-    window.titleTimeout = setTimeout(() => {
-      updateNote(activeNoteId, { title: val }).then(() => setSaveStatus('saved'));
-    }, 1000);
-  };
-
-  const onContentChange = (e) => {
-    const val = e.target.value;
-    setLocalContent(val);
-    setSaveStatus('saving');
-    if (window.contentTimeout) clearTimeout(window.contentTimeout);
-    window.contentTimeout = setTimeout(() => {
-      updateNote(activeNoteId, { content: val }).then(() => setSaveStatus('saved'));
-    }, 1000);
-  };
-
-  const handleAIEnhance = () => {
-    if (!localContent) return;
-    setIsAiLoading(true);
-    setTimeout(() => {
-      const aiSummary = `\n\n✨ AI Analysis:\nThis note covers key concepts regarding ${localTitle}. Suggested action items included.`;
-      const newContent = localContent + aiSummary;
-      setLocalContent(newContent);
-      updateNote(activeNoteId, { content: newContent });
-      if (!activeNote?.tags?.includes('AI Enhanced')) {
-        updateNote(activeNoteId, { tags: [...(activeNote?.tags || []), 'AI Enhanced'] });
-      }
-      setIsAiLoading(false);
-      showNotification('AI Analysis Complete');
-    }, 1500);
-  };
-
-  if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader className="animate-spin" /></div>;
-  if (!user) return <LoginScreen loginGoogle={loginGoogle} loginEmail={loginEmail} signupEmail={signupEmail} authError={authError} loading={authLoading} />;
-
-  return (
-    <div className="flex h-screen bg-slate-950 text-slate-300 font-sans overflow-hidden animate-fadeIn">
-      <div className={`${isSidebarOpen ? 'w-80' : 'w-0'} bg-slate-900 border-r border-slate-800 transition-all duration-300 flex flex-col relative`}>
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold text-xl text-white">
-            <div className="w-8 h-8 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center"><Sparkles size={18} className="text-white" /></div>
-            MindFlow
-          </div>
-        </div>
-        <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
-          <div className="flex items-center gap-2 overflow-hidden">
-            {user.photoURL ? <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full" /> : <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center"><User size={14} className="text-slate-300" /></div>}
-            <div className="text-xs truncate"><p className="text-white font-medium truncate w-32">{user.displayName || user.email}</p><p className="text-slate-500">Online</p></div>
-          </div>
-          <button onClick={logout} className="p-1.5 hover:bg-slate-800 rounded text-slate-500 hover:text-red-400"><LogOut size={16} /></button>
-        </div>
-        <div className="p-4 space-y-4">
-          <button onClick={handleAddNote} className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg flex items-center justify-center gap-2 font-medium transition-all shadow-lg shadow-cyan-900/20"><Plus size={20} /> New Note</button>
-          <div className="relative group">
-            <Search className="absolute left-3 top-2.5 text-slate-500 group-focus-within:text-cyan-400" size={18} />
-            <input type="text" placeholder="Search notes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-800 text-sm rounded-lg pl-10 pr-4 py-2.5 border border-slate-700 focus:border-cyan-500 focus:outline-none" />
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
-          {notesLoading && <div className="text-center py-4"><Loader className="animate-spin inline text-slate-500" /></div>}
-          {!notesLoading && filteredNotes.map(note => (
-            <div key={note.id} onClick={() => setActiveNoteId(note.id)} className={`p-3 rounded-lg cursor-pointer group transition-all border border-transparent ${activeNoteId === note.id ? 'bg-slate-800 border-slate-700 shadow-md' : 'hover:bg-slate-800/50'}`}>
-              <div className="flex justify-between items-start mb-1">
-                <h3 className={`font-semibold truncate ${activeNoteId === note.id ? 'text-cyan-400' : 'text-slate-200'}`}>{note.title || 'Untitled'}</h3>
-                <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) deleteNote(note.id); }} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1"><Trash2 size={14} /></button>
-              </div>
-              <p className="text-xs text-slate-500 truncate">{note.content || 'No content'}</p>
-            </div>
-          ))}
-        </div>
-        <div className="p-4 border-t border-slate-800"><Link to="/" className="text-xs flex items-center justify-center gap-2 text-slate-500 hover:text-cyan-400 w-full py-2 hover:bg-slate-800 rounded-lg"><ArrowLeft size={12} /> Back to Portfolio</Link></div>
-      </div>
-
-      <div className="flex-1 flex flex-col h-full bg-slate-950 relative">
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className={`absolute top-4 left-4 z-10 p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white border border-slate-700`}>{isSidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}</button>
-
-        {activeNote ? (
-          <>
-            <div className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-950/50 backdrop-blur-sm pl-16">
-              <div className="flex items-center gap-4">
-                 <span className="text-xs flex items-center gap-1 transition-colors duration-300">
-                  {saveStatus === 'saving' ? <><Cloud className="animate-pulse text-yellow-500" size={12}/> Saving...</> : <><Check className="text-green-500" size={12}/> Synced</>}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <button onClick={handleAIEnhance} disabled={isAiLoading} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                  {isAiLoading ? "Analyzing..." : <><Bot size={16} /> AI Enhance</>}
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-8 max-w-4xl mx-auto w-full">
-              <input type="text" value={localTitle} onChange={onTitleChange} placeholder="Note Title" className="w-full bg-transparent text-4xl font-bold text-white placeholder-slate-600 border-none focus:outline-none mb-6" />
-              <div className="flex flex-wrap gap-2 mb-8">
-                {activeNote.tags?.map((tag, i) => <span key={i} className="flex items-center gap-1 px-3 py-1 bg-cyan-900/20 text-cyan-400 rounded-full text-xs font-medium border border-cyan-900/50"><Tag size={12} /> {tag}</span>)}
-                <button onClick={() => { const t = prompt("Tag:"); if(t) updateNote(activeNote.id, { tags: [...(activeNote.tags||[]), t] }) }} className="text-xs text-slate-500 hover:text-cyan-400 flex items-center gap-1 px-2 py-1 border border-slate-800 rounded-full"><Plus size={12} /> Add Tag</button>
-              </div>
-              <textarea value={localContent} onChange={onContentChange} placeholder="Start typing..." className="w-full h-[calc(100vh-300px)] bg-transparent text-lg text-slate-300 placeholder-slate-700 border-none focus:outline-none resize-none leading-relaxed" />
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-600"><FileText size={64} className="mb-4 opacity-20" /><p>Select a note or create new</p></div>
-        )}
-      </div>
-      {notification && (
-        <div className="absolute bottom-8 right-8 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-2xl border border-slate-700 flex items-center gap-3 animate-fadeInUp z-50">
-          <div className={`${notification.type === 'error' ? 'bg-red-500' : 'bg-green-500'} rounded-full p-1`}>{notification.type === 'error' ? <X size={12} className="text-white" /> : <Check size={12} className="text-white" />}</div>{notification.msg}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ==========================================
-// COMPONENT: PORTFOLIO
-// ==========================================
-
-const Portfolio = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [formStatus, setFormStatus] = useState('idle');
-  const form = useRef();
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setFormStatus('submitting');
-    setTimeout(() => setFormStatus('success'), 1500); 
-  };
-
-  const navLinks = ['About', 'Skills', 'Projects', 'Contact'];
-  const SKILLS = [
-    { category: "Frontend", icon: <Code2 className="w-6 h-6" />, items: ["React.js", "Next.js", "Tailwind CSS", "TypeScript"] },
-    { category: "Backend", icon: <Terminal className="w-6 h-6" />, items: ["Node.js", "Firebase", "Python", "Express"] },
-    { category: "DevOps", icon: <Cpu className="w-6 h-6" />, items: ["Git", "GitHub", "Vercel", "Docker"] }
-  ];
-  const PROJECTS = [
-    {
-      id: 1,
-      title: "MindFlow AI Notes",
-      description: "A secure, cloud-synced note-taking app with AI capabilities. Features real-time syncing across devices using Firebase Firestore.",
-      tags: ["React", "Firebase", "Auth", "Firestore"],
-      links: { demo: "/mindflow", code: "#" }, // Internal link
-      image: "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-      id: 2,
-      title: "E-Commerce Dashboard",
-      description: "A comprehensive analytics dashboard for online retailers featuring real-time data visualization and inventory management.",
-      tags: ["React", "Chart.js", "Node.js", "MongoDB"],
-      links: { demo: "#", code: "#" },
-      image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-      id: 3,
-      title: "AI Content Generator",
-      description: "SaaS application that uses OpenAI's API to help marketers generate blog posts and social media captions instantly.",
-      tags: ["React", "Tailwind", "OpenAI API", "Stripe"],
-      links: { demo: "#", code: "#" },
-      image: "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&q=80&w=800"
-    }
-  ];
-
-  return (
-    <div className="bg-slate-900 min-h-screen text-slate-300 font-sans">
-      <nav className="fixed w-full z-50 bg-slate-900/95 backdrop-blur-md shadow-lg border-b border-slate-800 py-2">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex-shrink-0 font-bold text-2xl text-cyan-400 font-mono">&lt;Abdelrhman/&gt;</div>
-            <div className="hidden md:block ml-10 flex items-baseline space-x-8">
-              {navLinks.map((item, i) => (
-                <a key={item} href={`#${item.toLowerCase()}`} className="text-slate-300 hover:text-cyan-400 px-3 py-2 rounded-md text-sm font-medium transition-all hover:-translate-y-1"><span className="text-cyan-400 mr-1">0{i+1}.</span> {item}</a>
-              ))}
-            </div>
-            <div className="md:hidden"><button onClick={() => setIsOpen(!isOpen)} className="text-slate-300 hover:text-white p-2">{isOpen ? <X size={24} /> : <Menu size={24} />}</button></div>
-          </div>
-        </div>
-        {isOpen && <div className="md:hidden bg-slate-900 border-b border-slate-800 px-2 pt-2 pb-3 space-y-1">{navLinks.map(item => <a key={item} href={`#${item.toLowerCase()}`} onClick={() => setIsOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-slate-300 hover:text-cyan-400">{item}</a>)}</div>}
-      </nav>
-
-      <main>
-        {/* Hero */}
-        <section className="relative min-h-screen flex items-center justify-center bg-slate-950 overflow-hidden pt-16">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-float"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-float-delayed"></div>
-          <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
-            <p className="text-cyan-400 font-mono mb-4 text-lg inline-flex items-center gap-2"><Sparkles size={16} /> Hi, my name is</p>
-            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 tracking-tight">Abdelrhman Maged Ahmed.</h1>
-            <h2 className="text-4xl md:text-6xl font-bold text-slate-400 mb-8 min-h-[60px]">I build things for the web.</h2>
-            <div className="flex flex-col sm:flex-row gap-5 justify-center items-center mt-12">
-              <a href="#projects" className="px-8 py-4 bg-cyan-500 text-slate-900 font-bold rounded-lg hover:scale-105 transition-all">Check out my work</a>
-              <a href="#contact" className="px-8 py-4 border border-cyan-500 text-cyan-400 font-bold rounded-lg hover:bg-cyan-500/10 transition-all">Contact Me</a>
-            </div>
-          </div>
-        </section>
-
-        {/* Projects */}
-        <section id="projects" className="py-32 bg-slate-900">
-          <div className="max-w-7xl mx-auto px-4">
-            <h2 className="text-3xl font-bold text-white mb-16"><span className="text-cyan-400 mr-2">03.</span> Some Things I've Built</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-              {PROJECTS.map((proj) => (
-                <div key={proj.id} className="group bg-slate-800 rounded-xl overflow-hidden hover:-translate-y-3 transition-all duration-500 shadow-xl border border-slate-700/50 flex flex-col h-full">
-                  <div className="h-52 overflow-hidden relative">
-                    <img src={proj.image} alt={proj.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-90 group-hover:opacity-100" />
-                    <div className="absolute bottom-4 right-4 flex gap-2 translate-y-full group-hover:translate-y-0 transition-transform duration-500">
-                        {proj.links.demo.startsWith('/') ? (
-                          <Link to={proj.links.demo} className="p-2 bg-slate-900/90 text-white rounded-full hover:bg-cyan-500 transition-colors shadow-lg"><ExternalLink size={18} /></Link>
-                        ) : (
-                          <a href={proj.links.demo} className="p-2 bg-slate-900/90 text-white rounded-full hover:bg-cyan-500 transition-colors shadow-lg"><ExternalLink size={18} /></a>
-                        )}
-                    </div>
-                  </div>
-                  <div className="p-8 flex flex-col flex-grow">
-                    <h3 className="text-2xl font-bold text-white mb-3 group-hover:text-cyan-400">{proj.title}</h3>
-                    <p className="text-slate-400 mb-6 text-sm flex-grow">{proj.description}</p>
-                    <div className="flex flex-wrap gap-2 mt-auto pt-4 border-t border-slate-700/50">{proj.tags.map(tag => <span key={tag} className="text-xs font-mono text-cyan-400 bg-cyan-900/10 px-2 py-1 rounded">#{tag}</span>)}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      </main>
-      
-      <footer className="bg-slate-950 py-8 text-center text-slate-500 text-sm font-mono border-t border-slate-900">
-        <p>Designed & Built by Abdelrhman Maged Ahmed</p>
-      </footer>
-    </div>
-  );
-};
-
-// ==========================================
-// MAIN APP ROUTER
-// ==========================================
+// --- CUSTOM STYLES & ANIMATIONS ---
+const customStyles = `
+  @keyframes blob {
+    0% { transform: translate(0px, 0px) scale(1); }
+    33% { transform: translate(30px, -50px) scale(1.1); }
+    66% { transform: translate(-20px, 20px) scale(0.9); }
+    100% { transform: translate(0px, 0px) scale(1); }
+  }
+  .animate-blob {
+    animation: blob 7s infinite;
+  }
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+    100% { transform: translateY(0px); }
+  }
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+  .animate-float-delayed {
+    animation: float 3s ease-in-out infinite;
+    animation-delay: 1.5s;
+  }
+  .reveal-section {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: all 0.8s cubic-bezier(0.5, 0, 0, 1);
+  }
+  .reveal-section.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .stagger-1 { transition-delay: 100ms; }
+  .stagger-2 { transition-delay: 200ms; }
+  .stagger-3 { transition-delay: 300ms; }
+  .stagger-4 { transition-delay: 400ms; }
+`;
 
 export default function App() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState('home');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formStatus, setFormStatus] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(""); // Store specific error text
+
+  const form = useRef();
+  
+  // Intersection Observer for Scroll Animations
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    const sections = document.querySelectorAll('.reveal-section');
+    sections.forEach((section) => observer.observe(section));
+
+    return () => sections.forEach((section) => observer.unobserve(section));
+  }, []);
+
+  // Close mobile menu when clicking a link
+  const handleNavClick = (section) => {
+    setActiveSection(section);
+    setIsMenuOpen(false);
+    const element = document.getElementById(section);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  // --- EMAILJS HANDLER ---
+  const sendEmail = (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setFormStatus(null);
+    setErrorMessage("");
+
+    const SERVICE_ID = 'service_a3ux9ta';
+    const TEMPLATE_ID = 'template_y7kjqwr';
+    const PUBLIC_KEY = 'orfOk-sPfz8IJshSg';
+
+    // --- REAL EMAILJS CODE (UNCOMMENT LOCALLY) ---
+    
+    // Check if emailjs is loaded
+    if (!emailjs) {
+        setFormStatus('error');
+        setErrorMessage("EmailJS package not found. Run: npm install @emailjs/browser");
+        setIsSubmitting(false);
+        return;
+    }
+
+    emailjs.sendForm(SERVICE_ID, TEMPLATE_ID, form.current, PUBLIC_KEY)
+      .then((result) => {
+          console.log('SUCCESS!', result.text);
+          setFormStatus('success');
+          setIsSubmitting(false);
+          e.target.reset();
+          setTimeout(() => setFormStatus(null), 5000);
+      }, (error) => {
+          console.error('FAILED...', error.text);
+          setFormStatus('error');
+          setErrorMessage(error.text || "Connection failed. Check console.");
+          setIsSubmitting(false);
+      });
+    
+
+    // --- SIMULATION FOR PREVIEW ONLY ---
+    // This allows you to test the UI right now without the API keys/package.
+    
+  };
+
   return (
-    <>
-      <style>{`
-        @keyframes float { 0% { transform: translate(0px, 0px); } 50% { transform: translate(20px, 20px); } 100% { transform: translate(0px, 0px); } }
-        @keyframes float-delayed { 0% { transform: translate(0px, 0px); } 50% { transform: translate(-20px, 20px); } 100% { transform: translate(0px, 0px); } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-float { animation: float 6s ease-in-out infinite; }
-        .animate-float-delayed { animation: float-delayed 8s ease-in-out infinite; }
-        .animate-fadeInUp { animation: fadeInUp 0.8s ease-out forwards; }
-        .delay-100 { animation-delay: 0.1s; }
-        html { scroll-behavior: smooth; }
-      `}</style>
+    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-teal-500 selection:text-white overflow-x-hidden">
+      <style>{customStyles}</style>
       
-      <Routes>
-        <Route path="/" element={<Portfolio />} />
-        <Route path="/mindflow" element={<MindFlow />} />
-      </Routes>
-    </>
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full bg-slate-900/80 backdrop-blur-lg z-50 border-b border-slate-800/50 transition-all duration-300">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div 
+              className="flex-shrink-0 font-bold text-2xl text-teal-400 tracking-tighter cursor-pointer hover:scale-105 transition-transform duration-300 flex items-center gap-1 group" 
+              onClick={() => handleNavClick('home')}
+            >
+              <Terminal size={20} className="group-hover:rotate-12 transition-transform" />
+              AM<span className="text-slate-100">.DEV</span>
+            </div>
+            
+            {/* Desktop Menu */}
+            <div className="hidden md:block">
+              <div className="ml-10 flex items-baseline space-x-8">
+                {['Home', 'Projects', 'Skills', 'Contact'].map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => handleNavClick(item.toLowerCase())}
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-300 relative group ${activeSection === item.toLowerCase() ? 'text-teal-400' : 'text-slate-300 hover:text-white'}`}
+                  >
+                    {item}
+                    <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-teal-400 transform origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out ${activeSection === item.toLowerCase() ? 'scale-x-100' : ''}`}></span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Mobile Menu Button */}
+            <div className="md:hidden">
+              <button
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="text-slate-300 hover:text-white p-2 transition-transform active:scale-95"
+              >
+                {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Menu */}
+        <div className={`md:hidden bg-slate-800 border-b border-slate-700 overflow-hidden transition-all duration-300 ease-in-out ${isMenuOpen ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0'}`}>
+          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+            {['Home', 'Projects', 'Skills', 'Contact'].map((item) => (
+              <button
+                key={item}
+                onClick={() => handleNavClick(item.toLowerCase())}
+                className="text-slate-300 hover:text-teal-400 hover:bg-slate-700 block px-3 py-2 rounded-md text-base font-medium w-full text-left transition-colors"
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section id="home" className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between min-h-screen relative overflow-hidden">
+        {/* Background Blobs */}
+        <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
+        <div className="absolute top-0 -right-4 w-72 h-72 bg-teal-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
+        <div className="absolute -bottom-8 left-20 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+
+        <div className="md:w-1/2 text-left space-y-6 z-10 reveal-section is-visible">
+          <div className="inline-block px-3 py-1 bg-teal-500/10 text-teal-400 rounded-full text-sm font-medium border border-teal-500/20 mb-2 hover:bg-teal-500/20 transition-colors cursor-default">
+            Full Stack Developer
+          </div>
+          <h1 className="text-5xl md:text-7xl font-bold text-slate-100 tracking-tight leading-tight">
+            Hi, I'm <br/>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 via-blue-500 to-purple-600 animate-gradient">
+              Abdelrhman Maged
+            </span>
+          </h1>
+          <p className="text-xl text-slate-400 max-w-lg leading-relaxed">
+            I'm an 18-year-old developer passionate about building robust web applications. 
+            From <span className="text-teal-400 font-semibold">Laravel</span> backends to <span className="text-blue-400 font-semibold">React</span> frontends, I bring ideas to life with code.
+          </p>
+          <div className="flex gap-4 pt-4">
+            <button 
+              onClick={() => handleNavClick('projects')}
+              className="group px-8 py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-lg font-semibold transition-all shadow-lg shadow-teal-500/20 hover:shadow-teal-500/40 flex items-center gap-2 transform hover:-translate-y-1 hover:scale-105"
+            >
+              View Work <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+            <button 
+              onClick={() => handleNavClick('contact')}
+              className="px-8 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold transition-all border border-slate-700 hover:border-slate-600 transform hover:-translate-y-1 hover:bg-slate-700/80"
+            >
+              Contact Me
+            </button>
+          </div>
+          
+          <div className="flex gap-6 pt-8 text-slate-400">
+            <a href="#" className="hover:text-teal-400 transition-all hover:scale-125 hover:rotate-6"><Github size={24} /></a>
+            <a href="#" className="hover:text-teal-400 transition-all hover:scale-125 hover:-rotate-6"><Linkedin size={24} /></a>
+            <a href="#" className="hover:text-teal-400 transition-all hover:scale-125 hover:rotate-6"><Mail size={24} /></a>
+          </div>
+        </div>
+        
+        {/* Abstract Hero Visual */}
+        <div className="md:w-1/2 mt-12 md:mt-0 relative flex justify-center z-10 reveal-section stagger-2">
+           <div className="relative w-80 h-80 md:w-96 md:h-96 group perspective-1000">
+              <div className="absolute inset-0 bg-gradient-to-tr from-teal-500 to-blue-600 rounded-full opacity-20 blur-3xl animate-pulse"></div>
+              <div className="relative z-10 w-full h-full rounded-2xl bg-slate-800/50 backdrop-blur-xl border border-slate-700 p-6 shadow-2xl transition-all duration-700 ease-out group-hover:rotate-1 group-hover:scale-105">
+                <div className="h-full w-full rounded-lg bg-slate-900/80 border border-slate-700/50 flex flex-col items-center justify-center space-y-4 overflow-hidden relative">
+                  {/* Floating elements inside card */}
+                  <div className="absolute top-10 right-10 w-20 h-20 bg-teal-500/10 rounded-full blur-xl animate-blob"></div>
+                  <div className="absolute bottom-10 left-10 w-20 h-20 bg-purple-500/10 rounded-full blur-xl animate-blob animation-delay-2000"></div>
+
+                  <div className="relative animate-float">
+                    <div className="absolute -inset-1 bg-gradient-to-r from-teal-500 to-blue-500 rounded-full blur opacity-30 group-hover:opacity-60 transition duration-500"></div>
+                    <Code size={64} className="text-teal-400 relative z-10" />
+                  </div>
+                  <div className="flex gap-6 text-slate-500 pt-4">
+                    <Cpu size={24} className="animate-float hover:text-teal-400 transition-colors" style={{ animationDelay: '0.1s' }} />
+                    <Database size={24} className="animate-float-delayed hover:text-blue-400 transition-colors" style={{ animationDelay: '0.2s' }} />
+                    <Globe size={24} className="animate-float hover:text-purple-400 transition-colors" style={{ animationDelay: '0.3s' }} />
+                  </div>
+                </div>
+              </div>
+           </div>
+        </div>
+      </section>
+
+      {/* Projects Section */}
+      <section id="projects" className="py-20 bg-slate-800/30">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-end mb-12 reveal-section">
+            <div>
+              <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-4">Featured Projects</h2>
+              <div className="h-1 w-20 bg-teal-500 rounded transition-all duration-300 hover:w-32"></div>
+            </div>
+            <a href="#" className="text-teal-400 hover:text-teal-300 font-medium flex items-center gap-2 mt-4 md:mt-0 group transition-colors">
+              View Github <Github size={16} className="group-hover:rotate-12 transition-transform" />
+            </a>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {/* Mindflow */}
+            <div className="group bg-slate-900 rounded-xl overflow-hidden border border-slate-700 hover:border-teal-500/50 transition-all duration-500 hover:-translate-y-2 shadow-xl hover:shadow-teal-500/10 reveal-section stagger-1">
+              <div className="h-48 bg-slate-800 relative overflow-hidden">
+                <div className="absolute inset-0 bg-slate-900/40 z-10 transition-opacity group-hover:opacity-0"></div>
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-indigo-900/80 to-slate-900 group-hover:scale-110 transition-transform duration-700">
+                  <div className="text-center z-20">
+                    <Layout size={48} className="mx-auto text-indigo-400 mb-2 drop-shadow-lg" />
+                    <span className="font-bold text-lg text-slate-300">Mindflow</span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-slate-100 group-hover:text-teal-400 transition-colors">Mindflow</h3>
+                  <div className="flex gap-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+                    <a href="https://mindflow-notes.vercel.app/" target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-full hover:bg-teal-500 hover:text-white transition-colors border border-slate-700" title="View Live">
+                      <ExternalLink size={16} />
+                    </a>
+                    <a href="#" target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-full hover:bg-teal-500 hover:text-white transition-colors border border-slate-700" title="View Code">
+                      <Github size={16} />
+                    </a>
+                  </div>
+                </div>
+                <p className="text-slate-400 mb-6 text-sm leading-relaxed">
+                  A productivity application with notes, AI enhancement, and dark/light mode.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-3 py-1 bg-slate-800 text-teal-400 text-xs rounded-full border border-slate-700 hover:border-teal-500/50 transition-colors">React</span>
+                  <span className="px-3 py-1 bg-slate-800 text-teal-400 text-xs rounded-full border border-slate-700 hover:border-teal-500/50 transition-colors">Firebase</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Shop Backend */}
+            <div className="group bg-slate-900 rounded-xl overflow-hidden border border-slate-700 hover:border-teal-500/50 transition-all duration-500 hover:-translate-y-2 shadow-xl hover:shadow-teal-500/10 reveal-section stagger-2">
+              <div className="h-48 bg-slate-800 relative overflow-hidden">
+                <div className="absolute inset-0 bg-slate-900/40 z-10 transition-opacity group-hover:opacity-0"></div>
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-emerald-900/80 to-slate-900 group-hover:scale-110 transition-transform duration-700">
+                  <div className="text-center z-20">
+                    <Server size={48} className="mx-auto text-emerald-400 mb-2 drop-shadow-lg" />
+                    <span className="font-bold text-lg text-slate-300">E-Commerce API</span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-slate-100 group-hover:text-teal-400 transition-colors">Shop Backend</h3>
+                  <div className="flex gap-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+                     <a href="#" className="p-2 bg-slate-800 rounded-full hover:bg-teal-500 hover:text-white transition-colors border border-slate-700"><ExternalLink size={16} /></a>
+                     <a href="#" className="p-2 bg-slate-800 rounded-full hover:bg-teal-500 hover:text-white transition-colors border border-slate-700"><Github size={16} /></a>
+                  </div>
+                </div>
+                <p className="text-slate-400 mb-6 text-sm leading-relaxed">
+                  A robust REST API for an e-commerce platform built with Laravel. Features auth, cart management, and payment gateways.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-3 py-1 bg-slate-800 text-teal-400 text-xs rounded-full border border-slate-700 hover:border-teal-500/50 transition-colors">Laravel</span>
+                  <span className="px-3 py-1 bg-slate-800 text-teal-400 text-xs rounded-full border border-slate-700 hover:border-teal-500/50 transition-colors">MySQL</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Chat App */}
+            <div className="group bg-slate-900 rounded-xl overflow-hidden border border-slate-700 hover:border-teal-500/50 transition-all duration-500 hover:-translate-y-2 shadow-xl hover:shadow-teal-500/10 reveal-section stagger-3">
+              <div className="h-48 bg-slate-800 relative overflow-hidden">
+                <div className="absolute inset-0 bg-slate-900/40 z-10 transition-opacity group-hover:opacity-0"></div>
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-900/80 to-slate-900 group-hover:scale-110 transition-transform duration-700">
+                  <div className="text-center z-20">
+                    <Smartphone size={48} className="mx-auto text-purple-400 mb-2 drop-shadow-lg" />
+                    <span className="font-bold text-lg text-slate-300">Chat App</span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-slate-100 group-hover:text-teal-400 transition-colors">Realtime Chat</h3>
+                  <div className="flex gap-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+                     <a href="#" className="p-2 bg-slate-800 rounded-full hover:bg-teal-500 hover:text-white transition-colors border border-slate-700"><ExternalLink size={16} /></a>
+                     <a href="#" className="p-2 bg-slate-800 rounded-full hover:bg-teal-500 hover:text-white transition-colors border border-slate-700"><Github size={16} /></a>
+                  </div>
+                </div>
+                <p className="text-slate-400 mb-6 text-sm leading-relaxed">
+                  A real-time messaging application using Node.js and Socket.io.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-3 py-1 bg-slate-800 text-teal-400 text-xs rounded-full border border-slate-700 hover:border-teal-500/50 transition-colors">Node.js</span>
+                  <span className="px-3 py-1 bg-slate-800 text-teal-400 text-xs rounded-full border border-slate-700 hover:border-teal-500/50 transition-colors">Socket.io</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Skills Section */}
+      <section id="skills" className="py-20 bg-slate-900">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-12 reveal-section">
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-4">Technical Skills</h2>
+            <div className="h-1 w-20 bg-teal-500 rounded transition-all duration-300 hover:w-32"></div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {/* Frontend */}
+            <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 hover:border-teal-500/50 transition-all duration-300 hover:bg-slate-800 hover:-translate-y-1 reveal-section stagger-1">
+              <div className="w-12 h-12 bg-teal-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-teal-500/20 transition-colors">
+                <Layout className="text-teal-400" size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-100 mb-4">Frontend</h3>
+              <ul className="space-y-2 text-slate-400">
+                {['JavaScript', 'React.js', 'HTML5', 'CSS3', 'Bootstrap', 'Tailwind CSS'].map(skill => (
+                  <li key={skill} className="flex items-center gap-2 hover:text-teal-400 transition-colors">
+                    <div className="w-1.5 h-1.5 bg-teal-500 rounded-full"></div>{skill}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Backend */}
+            <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 hover:border-blue-500/50 transition-all duration-300 hover:bg-slate-800 hover:-translate-y-1 reveal-section stagger-2">
+              <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-500/20 transition-colors">
+                <Server className="text-blue-400" size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-100 mb-4">Backend</h3>
+              <ul className="space-y-2 text-slate-400">
+                {['PHP', 'Laravel', 'Node.js', 'Express', 'Python', 'Firebase'].map(skill => (
+                  <li key={skill} className="flex items-center gap-2 hover:text-blue-400 transition-colors">
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>{skill}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Tools */}
+            <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 hover:border-purple-500/50 transition-all duration-300 hover:bg-slate-800 hover:-translate-y-1 reveal-section stagger-3">
+              <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
+                <Terminal className="text-purple-400" size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-100 mb-4">Tools</h3>
+              <ul className="space-y-2 text-slate-400">
+                {['Git', 'GitHub', 'VS Code', 'Postman', 'MySQL', 'Composer'].map(skill => (
+                  <li key={skill} className="flex items-center gap-2 hover:text-purple-400 transition-colors">
+                    <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>{skill}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Soft Skills */}
+            <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 hover:border-pink-500/50 transition-all duration-300 hover:bg-slate-800 hover:-translate-y-1 reveal-section stagger-4">
+              <div className="w-12 h-12 bg-pink-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-pink-500/20 transition-colors">
+                <Globe className="text-pink-400" size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-100 mb-4">Soft Skills</h3>
+              <ul className="space-y-2 text-slate-400">
+                {['Problem Solving', 'Teamwork', 'Communication', 'Time Management', 'Adaptability'].map(skill => (
+                  <li key={skill} className="flex items-center gap-2 hover:text-pink-400 transition-colors">
+                    <div className="w-1.5 h-1.5 bg-pink-500 rounded-full"></div>{skill}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Contact Section */}
+      <section id="contact" className="py-20 bg-slate-800/30">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12 reveal-section">
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-4">Get In Touch</h2>
+            <p className="text-slate-400">Have a project in mind or just want to say hi? I'd love to hear from you.</p>
+          </div>
+
+          <div className="bg-slate-900 p-8 rounded-2xl border border-slate-700 shadow-2xl relative overflow-hidden reveal-section stagger-1">
+            {/* Decorative background circle */}
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-teal-500/10 rounded-full blur-2xl"></div>
+            <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-40 h-40 bg-blue-500/10 rounded-full blur-2xl"></div>
+
+            {/* Form */}
+            <form ref={form} onSubmit={sendEmail} className="space-y-6 relative z-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="group">
+                  <label htmlFor="user_name" className="block text-sm font-medium text-slate-300 mb-2 group-focus-within:text-teal-400 transition-colors">Name</label>
+                  <input 
+                    type="text" 
+                    name="user_name" 
+                    required 
+                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none text-slate-100 placeholder-slate-500 transition-all focus:bg-slate-800/80" 
+                    placeholder="Abdelrhman Maged" 
+                  />
+                </div>
+                <div className="group">
+                  <label htmlFor="user_email" className="block text-sm font-medium text-slate-300 mb-2 group-focus-within:text-teal-400 transition-colors">Email</label>
+                  <input 
+                    type="email" 
+                    name="user_email" 
+                    required 
+                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none text-slate-100 placeholder-slate-500 transition-all focus:bg-slate-800/80" 
+                    placeholder="you@example.com" 
+                  />
+                </div>
+              </div>
+              <div className="group">
+                <label htmlFor="message" className="block text-sm font-medium text-slate-300 mb-2 group-focus-within:text-teal-400 transition-colors">Message</label>
+                <textarea 
+                  name="message" 
+                  rows="4" 
+                  required 
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none text-slate-100 placeholder-slate-500 transition-all focus:bg-slate-800/80" 
+                  placeholder="Your message here..."
+                ></textarea>
+              </div>
+              
+              <button 
+                type="submit" 
+                disabled={isSubmitting}
+                className="w-full py-4 bg-teal-500 hover:bg-teal-600 text-white font-bold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-teal-500/20 active:scale-95"
+              >
+                {isSubmitting ? (
+                  <>Sending... <Loader2 className="animate-spin" size={18} /></>
+                ) : (
+                  <>Send Message <Send size={18} className="group-hover:translate-x-1 transition-transform" /></>
+                )}
+              </button>
+
+              {/* Status Messages */}
+              {formStatus === 'success' && (
+                <div className="mt-4 p-3 bg-green-500/20 text-green-400 rounded-lg flex items-center gap-2 animate-fadeIn border border-green-500/30">
+                  <CheckCircle size={18} /> Message sent successfully!
+                </div>
+              )}
+              {formStatus === 'error' && (
+                <div className="mt-4 p-3 bg-red-500/20 text-red-400 rounded-lg flex items-center gap-2 animate-fadeIn border border-red-500/30">
+                  <AlertCircle size={18} /> {errorMessage ? errorMessage : "Failed to send message. Please try again."}
+                </div>
+              )}
+            </form>
+            
+            <div className="mt-12 flex flex-col md:flex-row justify-center items-center gap-8 text-slate-400 border-t border-slate-800 pt-8 relative z-10">
+              <a href="mailto:abdelrhman@example.com" className="flex items-center gap-2 hover:text-teal-400 transition-all hover:scale-105">
+                <Mail size={18} className="text-teal-400" />
+                <span>abdelrhman@example.com</span>
+              </a>
+              <div className="flex items-center gap-2 hover:text-teal-400 transition-all hover:scale-105 cursor-default">
+                <MapPin size={18} className="text-teal-400" />
+                <span>Egypt</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-8 bg-slate-950 text-center text-slate-500 text-sm">
+        <p>© 2024 Abdelrhman Maged. Built with React & Tailwind.</p>
+      </footer>
+    </div>
   );
 }
