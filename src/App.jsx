@@ -245,7 +245,7 @@ export default function App() {
           </div>
           
           <div className="flex gap-6 pt-8 text-slate-400">
-            <a href="https://github.com/AbdelrhmanMaged1" className="hover:text-teal-400 transition-all hover:scale-125 hover:rotate-6"><Github size={24} /></a>
+            <a href="https://github.com/AbdelrhmanMaged1" target="_blank" className="hover:text-teal-400 transition-all hover:scale-125 hover:rotate-6"><Github size={24} /></a>
             <a href="#" className="hover:text-teal-400 transition-all hover:scale-125 hover:-rotate-6"><Linkedin size={24} /></a>
             {/* UPDATED: Direct Gmail Link for Hero Section */}
             <a href="https://mail.google.com/mail/?view=cm&fs=1&to=abdelrhman@example.com" target="_blank" rel="noopener noreferrer" className="hover:text-teal-400 transition-all hover:scale-125 hover:rotate-6"><Mail size={24} /></a>
@@ -534,7 +534,7 @@ export default function App() {
               {/* UPDATED: Direct Gmail Link for Contact Section */}
               <a href="https://mail.google.com/mail/?view=cm&fs=1&to=abdelrhman@example.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-teal-400 transition-all hover:scale-105">
                 <Mail size={18} className="text-teal-400" />
-                <span>abdelrhman@example.com</span>
+                <span>abdelrhman.syam1@gmail.com</span>
               </a>
               <div className="flex items-center gap-2 hover:text-teal-400 transition-all hover:scale-105 cursor-default">
                 <MapPin size={18} className="text-teal-400" />
