@@ -285,7 +285,7 @@ export default function App() {
               <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-4">Featured Projects</h2>
               <div className="h-1 w-20 bg-teal-500 rounded transition-all duration-300 hover:w-32"></div>
             </div>
-            <a href="https://github.com/AbdelrhmanMaged1" className="text-teal-400 hover:text-teal-300 font-medium flex items-center gap-2 mt-4 md:mt-0 group transition-colors">
+            <a href="https://github.com/AbdelrhmanMaged1" target='_blank' className="text-teal-400 hover:text-teal-300 font-medium flex items-center gap-2 mt-4 md:mt-0 group transition-colors">
               View Github <Github size={16} className="group-hover:rotate-12 transition-transform" />
             </a>
           </div>
