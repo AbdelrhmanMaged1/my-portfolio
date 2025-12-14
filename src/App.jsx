@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 // UNCOMMENT THIS LINE LOCALLY AFTER RUNNING: npm install @emailjs/browser
- import emailjs from '@emailjs/browser';
+import emailjs from '@emailjs/browser';
 import { 
   Github, 
   Linkedin, 
@@ -115,7 +115,7 @@ export default function App() {
     setErrorMessage("");
 
     const SERVICE_ID = 'service_a3ux9ta';
-    const TEMPLATE_ID = 'template_y7kjqwr';
+    const TEMPLATE_ID = 'template_l2nm5mm';
     const PUBLIC_KEY = 'orfOk-sPfz8IJshSg';
 
     // --- REAL EMAILJS CODE (UNCOMMENT LOCALLY) ---
@@ -245,9 +245,10 @@ export default function App() {
           </div>
           
           <div className="flex gap-6 pt-8 text-slate-400">
-            <a href="#" className="hover:text-teal-400 transition-all hover:scale-125 hover:rotate-6"><Github size={24} /></a>
+            <a href="https://github.com/AbdelrhmanMaged1" className="hover:text-teal-400 transition-all hover:scale-125 hover:rotate-6"><Github size={24} /></a>
             <a href="#" className="hover:text-teal-400 transition-all hover:scale-125 hover:-rotate-6"><Linkedin size={24} /></a>
-            <a href="#" className="hover:text-teal-400 transition-all hover:scale-125 hover:rotate-6"><Mail size={24} /></a>
+            {/* UPDATED: Direct Gmail Link for Hero Section */}
+            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=abdelrhman@example.com" target="_blank" rel="noopener noreferrer" className="hover:text-teal-400 transition-all hover:scale-125 hover:rotate-6"><Mail size={24} /></a>
           </div>
         </div>
         
@@ -284,7 +285,7 @@ export default function App() {
               <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-4">Featured Projects</h2>
               <div className="h-1 w-20 bg-teal-500 rounded transition-all duration-300 hover:w-32"></div>
             </div>
-            <a href="#" className="text-teal-400 hover:text-teal-300 font-medium flex items-center gap-2 mt-4 md:mt-0 group transition-colors">
+            <a href="https://github.com/AbdelrhmanMaged1" className="text-teal-400 hover:text-teal-300 font-medium flex items-center gap-2 mt-4 md:mt-0 group transition-colors">
               View Github <Github size={16} className="group-hover:rotate-12 transition-transform" />
             </a>
           </div>
@@ -530,7 +531,8 @@ export default function App() {
             </form>
             
             <div className="mt-12 flex flex-col md:flex-row justify-center items-center gap-8 text-slate-400 border-t border-slate-800 pt-8 relative z-10">
-              <a href="mailto:abdelrhman@example.com" className="flex items-center gap-2 hover:text-teal-400 transition-all hover:scale-105">
+              {/* UPDATED: Direct Gmail Link for Contact Section */}
+              <a href="https://mail.google.com/mail/?view=cm&fs=1&to=abdelrhman@example.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-teal-400 transition-all hover:scale-105">
                 <Mail size={18} className="text-teal-400" />
                 <span>abdelrhman@example.com</span>
               </a>
